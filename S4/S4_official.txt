@@ -1,0 +1,293 @@
+#include <iostream>
+#include <cstdlib>
+#include <string>
+#include <cmath>
+using namespace std;
+
+
+// Date类的定义
+class Date{
+	private:
+		int year;
+		int month;
+		int day;
+		int totalDays;//该日期是从公元元年1月1日开始的第几天
+	
+	public:
+		 Date(int year, int month, int day);//构造函数
+		 int getYear()const{return year;}
+		 int getMonth()const{return month;}
+		 int getDay()const{return day;}
+		 int getMaxDay()const;//获得当月有多少天 
+		 bool isLeapYear()const
+		 {return (year%4==0&&year%100!=0)||year%400==0;} //判断是否为闰年
+		 
+		 void show()const;
+		 //计算两个日期之间差多少天
+		 int distance(const Date& date) const
+		 { return totalDays-date.totalDays;} 
+};
+
+
+
+// Date类的实现
+namespace{//namespace使下面的定义只在当前文件中有效 
+	//存储平年中的某个月1日之前有多少天，为便于getMaxDay函数的实现，该数组多出一项
+	const int DAYS_BEFORE_MONTH[]={0,31,59,90,120,151,181,212,243,273,304,334,365}; 
+}
+
+Date::Date(int year, int month, int day):year(year),month(month),day(day){
+	if(day<=0||day>getMaxDay())
+	{cout<<"Invalid date:";
+	show();
+	cout<<endl;
+	exit(1);
+	}
+	int years=year-1;
+	totalDays=years*365+years/4-years/100+years/400+DAYS_BEFORE_MONTH[month-1]+day;
+	if(isLeapYear()&&month>2) totalDays++;
+	} 
+	
+int Date::getMaxDay()const{
+if(isLeapYear()&&month==2)
+return 29;
+else
+return DAYS_BEFORE_MONTH[month]-DAYS_BEFORE_MONTH[month-1];
+}
+
+void Date::show()const{
+cout<<getYear()<<"-"<<getMonth()<<"-"<<getDay();
+}
+
+
+// Accumulator类的定义与实现
+class Accumulator{//将某个数值按日累加 
+private:
+Date lastDate;//上次变更数值的日期
+double value;//数值的当前值
+double sum;//数值按日累加之和
+
+public:
+//构造函数，date为开始累加的日期，value为初始值
+Accumulator(const Date& date, double value):lastDate(date),value(value),sum(0){}
+//获得日期date的累加结果
+double getSum(const Date& date) const{
+return sum+value*date.distance(lastDate);
+} 
+//在date将数值变更为value
+void change(const Date& date, double value){
+	sum=getSum(date);
+	lastDate=date;
+	this->value=value;
+} 
+//初始化，将日期变为date，数值变为value，累加器清零
+void reset(const Date& date, double value){
+	lastDate=date;
+	this->value=value;
+	sum=0;
+} 
+};
+
+
+// Account类（基类）的定义
+class Account{ //基本账户类 
+private:
+	std::string id;//账号 
+	double balance;//余额 
+	static double total;//所有账户的总金额 
+protected:
+	//供派生类调用的构造函数，id为账户
+	Account(const Date &date, const std::string &id);
+	void record(const Date &date, double amount, const std::string &desc);	//记录一笔帐，date为日期，amount为金额，desc为说明
+	void error(const std::string &msg) const;//报告错误信息 
+public:
+	const std::string &getId() const {return id;}
+	double getBalance() const {return balance;}
+	static double getTotal() {return total;	} 
+	void show() const;
+};
+
+
+// SavingsAccount类（派生类）的定义
+class SavingsAccount:public Account{//储蓄账户类 
+ 
+private:
+	Accumulator acc;//辅助计算利息的累加器
+	double rate;//存款的年利率 
+public:
+	SavingsAccount(const Date &date, const std::string &id, double rate);//构造函数
+	double getRate() const {return rate;}
+	void deposit(const Date &date, double amount, const std::string &desc);//存入现金
+	void withdraw(const Date &date, double amount, const std::string &desc) ;//取出现金
+	void settle(const Date &date);//结算利息
+};
+
+
+// CreditAccount类（派生类）的定义
+class CreditAccount:public Account{//信用账户类 
+private:
+	Accumulator acc;//辅助计算利息的累加器
+	double credit;//信用额度
+	double rate;//欠款的日利率
+	double fee;//信用卡年费
+	double getDebt() const{
+	double balance=getBalance();
+	return (balance<0?balance:0);
+} 
+public:
+	CreditAccount(const Date &date, const std::string &id, double credit, double rate, double fee);//构造函数
+	double getCredit() const {return credit;}
+	double getRate() const {return rate;}
+	double getFee() const {return fee;}
+	double getAvailableCredit() const{
+	if(getBalance()<0)
+		return credit+getBalance();
+	else
+		return credit;
+	} 
+	void deposit(const Date &date, double amount, const std::string &desc);//存入现金
+	void withdraw(const Date &date, double amount, const std::string &desc) ;//取出现金
+	void settle(const Date &date);//结算利息
+	void show() const;
+	
+}; 
+
+double Account::total=0;
+
+
+//Account类的实现
+Account::Account(const Date &date, const string &id):id(id),balance(0)
+{date.show();
+cout<<"\t#"<<id<<" created"<<endl;
+ } 
+ 
+ void Account::record(const Date &date, double amount, const string &desc)
+ {
+ amount=floor(amount*100+0.5)/100;//保留小数点后两位
+	balance+=amount;
+	total+=amount;
+	date.show();
+	cout<<"\t#"<<id<<"\t"<<amount<<"\t"<<balance<<"\t"<<desc<<endl;
+ }
+ void Account::show() const
+{cout<<"#"<<id<<"\tBalance:"<<balance;}
+void Account::error(const string &msg) const
+{cout<<"Error(# "<<id<<"):"<<msg<<endl;}
+
+
+//SavingsAccount类（派生类）的实现
+SavingsAccount::SavingsAccount(const Date &date,const string &id, double rate):
+Account(date,id),rate(rate), acc(date,0){}
+
+void SavingsAccount::deposit(const Date &date, double amount, const string &desc)
+{record(date,amount,desc);
+acc.change(date,getBalance());
+}
+
+void SavingsAccount::withdraw(const Date &date, double amount, const string &desc)
+{
+	if(amount>getBalance()){ 
+	error("not enough money");
+}
+	else
+	{
+	record(date, -amount,desc);
+	acc.change(date,getBalance());
+	}
+}
+
+void SavingsAccount::settle(const Date &date)
+{double interest=acc.getSum(date)*rate/date.distance(Date(date.getYear()-1,1,1));//计算利息
+if(interest!=0)
+record(date,interest,"interest");
+acc.reset(date,getBalance()); 
+}
+
+
+//CreditAccount类（派生类）的实现
+CreditAccount::CreditAccount(const Date &date, const string &id, double credit, double rate, double fee):
+Account(date,id),credit(credit),rate(rate),fee(fee),acc(date,0){} 
+
+void CreditAccount::deposit(const Date &date, double amount, const string &desc)
+{record(date,amount,desc);
+acc.change(date,getDebt());
+}
+
+void CreditAccount::withdraw(const Date &date, double amount, const string &desc)
+{
+	if(amount-getBalance()>credit)
+	error("not enough credit");
+	else
+	{
+	record(date, -amount,desc);
+	acc.change(date,getDebt());
+	}
+}
+
+void CreditAccount::settle(const Date &date)
+{double interest=acc.getSum(date)*rate; 
+if(interest!=0)
+record(date,interest,"interest");
+if(date.getMonth()==1)
+record(date,-fee,"annual fee");
+acc.reset(date,getDebt()); 
+}
+
+void CreditAccount::show() const{
+Account::show();
+cout<<"\tAvailable credit:"<<getAvailableCredit();
+}
+
+
+
+// The main function is not the official version
+
+int main() {
+	const int MAX_ACCOUNTS = 1000; // 最大账户数量
+	SavingsAccount* savingsAccounts[MAX_ACCOUNTS]; // 储蓄账户数组
+	CreditAccount* creditAccounts[MAX_ACCOUNTS]; // 信用账户数组
+	int numSavingsAccounts = 0; // 当前储蓄账户数量
+	int numCreditAccounts = 0; // 当前信用账户数量
+	
+	Date date(2008, 11, 1);
+	SavingsAccount* sa1 = new SavingsAccount(date, "User_1", 0.015);
+	savingsAccounts[numSavingsAccounts++] = sa1;
+	SavingsAccount* sa2 = new SavingsAccount(date, "User_2", 0.015);
+	savingsAccounts[numSavingsAccounts++] = sa2;
+	CreditAccount* ca1 = new CreditAccount(date, "User_3", 10000, 0.0005, 50);
+	creditAccounts[numCreditAccounts++] = ca1;
+	
+	sa1->deposit(Date(2008, 11, 5), 5000, "Salary");
+	ca1->withdraw(Date(2008, 11, 15), 2000, "buy a cell");
+	sa2->deposit(Date(2008, 11, 25), 10000, "sell stock 0323");
+	ca1->settle(Date(2008, 12, 1));
+	ca1->deposit(Date(2008, 12, 1), 2016, "repay the credit");
+	sa1->deposit(Date(2008, 12, 5), 5500, "Salary");
+	sa1->settle(Date(2009, 1, 1));
+	sa2->settle(Date(2009, 1, 1));
+	ca1->withdraw(Date(2009, 1, 1), 50, "annual Fee");
+	
+	std::cout << std::endl;
+	
+	for (int i = 0; i < numSavingsAccounts; i++) {
+		savingsAccounts[i]->show();
+		std::cout << std::endl;
+	}
+	for (int i = 0; i < numCreditAccounts; i++) {
+		creditAccounts[i]->show();
+		std::cout << std::endl;
+	}
+	
+	std::cout << "Total:" << Account::getTotal() << std::endl;
+	
+	// 释放动态分配的内存
+	for (int i = 0; i < numSavingsAccounts; i++) {
+		delete savingsAccounts[i];
+	}
+	for (int i = 0; i < numCreditAccounts; i++) {
+		delete creditAccounts[i];
+	}
+	
+	return 0;
+}
+
